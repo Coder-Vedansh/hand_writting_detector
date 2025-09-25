@@ -1,24 +1,24 @@
 # -------------------------------
-# Handwritten Letter Recognition App
+# Handwritten Digit Recognition App
 # -------------------------------
 
 import os
 import numpy as np
 import cv2
 import streamlit as st
+from tensorflow.keras.datasets import mnist
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D
 from tensorflow.keras.utils import to_categorical
 from streamlit_drawable_canvas import st_canvas
-from tensorflow.keras.datasets import mnist
-import tensorflow_datasets as tfds
 
 # -------------------------------
 # Model Path
 # -------------------------------
-MODEL_PATH = "emnist_letters_model.h5"
+MODEL_PATH = "mnist_model.h5"
 abs_model_path = os.path.abspath(MODEL_PATH)
 st.write(f"📂 Model Path: {abs_model_path}")  # Display model path in the app
+
 
 # -------------------------------
 # Train or Load Model (cached)
@@ -26,34 +26,16 @@ st.write(f"📂 Model Path: {abs_model_path}")  # Display model path in the app
 @st.cache_resource
 def load_or_train_model():
     if not os.path.exists(MODEL_PATH):
-        # Load EMNIST letters dataset
-        (ds_train, ds_test), ds_info = tfds.load(
-            "emnist/letters",
-            split=["train", "test"],
-            as_supervised=True,
-            with_info=True
-        )
-
-        # Convert dataset to numpy arrays
-        def prep(ds):
-            images, labels = [], []
-            for img, label in tfds.as_numpy(ds):
-                images.append(img)
-                labels.append(label)
-            return np.array(images), np.array(labels)
-
-        x_train, y_train = prep(ds_train)
-        x_test, y_test = prep(ds_test)
+        # Load dataset
+        (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
         # Preprocess
         x_train = x_train.astype("float32") / 255.0
         x_test = x_test.astype("float32") / 255.0
-        x_train = np.expand_dims(x_train, -1)  # (28,28,1)
-        x_test = np.expand_dims(x_test, -1)
-
-        # Labels are 1–26 → shift to 0–25
-        y_train = to_categorical(y_train - 1, 26)
-        y_test = to_categorical(y_test - 1, 26)
+        x_train = x_train.reshape((-1, 28, 28, 1))
+        x_test = x_test.reshape((-1, 28, 28, 1))
+        y_train = to_categorical(y_train, 10)
+        y_test = to_categorical(y_test, 10)
 
         # Build model
         model = Sequential([
@@ -63,7 +45,7 @@ def load_or_train_model():
             MaxPooling2D((2, 2)),
             Flatten(),
             Dense(128, activation="relu"),
-            Dense(26, activation="softmax")
+            Dense(10, activation="softmax")
         ])
 
         model.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["accuracy"])
@@ -77,13 +59,14 @@ def load_or_train_model():
 
     return model
 
+
 model = load_or_train_model()
 
 # -------------------------------
 # Streamlit Web App
 # -------------------------------
-st.title("🔤 Handwritten Letter Recognition")
-st.write("Draw a letter (A–Z) in the box below, then click **Predict!**")
+st.title("✍ Handwritten Digit Recognition")
+st.write("Draw a digit (0–9) in the box below, then click **Predict!**")
 
 # Canvas for drawing
 canvas_result = st_canvas(
@@ -111,12 +94,9 @@ if st.button("Predict"):
 
         # Prediction
         pred = model.predict(img)[0]
-        letter_idx = np.argmax(pred)  # 0–25
+        digit = np.argmax(pred)
         confidence = np.max(pred) * 100
 
-        # Map index → letter
-        letter = chr(letter_idx + ord("A"))
-
-        st.success(f"✅ Predicted Letter: {letter} (Confidence: {confidence:.2f}%)")
+        st.success(f"✅ Predicted Digit: {digit} (Confidence: {confidence:.2f}%)")
     else:
-        st.warning("⚠ Please draw a letter before predicting.")
+        st.warning("⚠ Please draw a digit before predicting.")
